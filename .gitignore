@@ -37,3 +37,7 @@ next-env.d.ts
 # local image assets (uploaded to InsForge, not served from repo)
 /dresses/
 /person.*
+
+# Local secrets (InsForge API key)
+.claude/settings.local.json
+.mcp.json
