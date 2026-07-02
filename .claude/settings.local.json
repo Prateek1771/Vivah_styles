@@ -5,7 +5,9 @@
       "Bash(set API_KEY=ik_875dc61f1dea2cf12030cb9618cc4ff8)",
       "Bash(set API_BASE_URL=https://68bdfaz8.ap-southeast.insforge.app)",
       "mcp__insforge__fetch-docs",
-      "mcp__insforge__get-backend-metadata"
+      "mcp__insforge__get-backend-metadata",
+      "Bash(npx tsc *)",
+      "Bash(echo \"tsc exit: $?\")"
     ]
   },
   "enableAllProjectMcpServers": true,
