@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
 import { createServerClient } from '@/lib/insforge/server';
-import { encodeSession } from '@/lib/auth';
+import { encodeSession, getDemoEmail } from '@/lib/auth';
 import { captureServerEvent } from '@/lib/posthog';
 import type { StaffRole } from '@/lib/constants';
 
@@ -22,6 +22,10 @@ interface StaffRow {
 
 export async function POST(req: Request) {
   try {
+    // Demo gate: staff sign-in requires a verified visitor email first.
+    if (!(await getDemoEmail())) {
+      return Response.json({ ok: false, error: 'Verify your email first to try the demo.' }, { status: 403 });
+    }
     const parsed = schema.safeParse(await req.json());
     if (!parsed.success) {
       return Response.json({ ok: false, error: 'Enter a store code and password.' }, { status: 400 });

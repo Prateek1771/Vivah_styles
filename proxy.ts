@@ -21,7 +21,9 @@ const PROTECTED_PREFIXES: Record<string, string[]> = {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname === '/' || pathname === '/guidelines' || pathname.startsWith('/api/')) {
+  const publicPaths = ['/', '/login', '/try', '/guidelines'];
+  // Dotted paths are static files from public/ (landing page assets etc.).
+  if (publicPaths.includes(pathname) || pathname.startsWith('/api/') || /\.\w+$/.test(pathname)) {
     return NextResponse.next();
   }
 
@@ -29,7 +31,7 @@ export async function proxy(request: NextRequest) {
   const session = raw ? await decodeSession(raw) : null;
 
   if (!session) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   for (const [prefix, roles] of Object.entries(PROTECTED_PREFIXES)) {

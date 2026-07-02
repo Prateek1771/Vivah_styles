@@ -52,6 +52,35 @@ export async function getSession(): Promise<SessionPayload | null> {
   return decodeSession(raw);
 }
 
+// Demo gate: visitors verify their email via OTP before reaching the store gate.
+// Cookie holds just the verified email, HMAC-signed like vivah_session.
+export const DEMO_COOKIE = 'vivah_demo';
+
+export async function encodeDemoCookie(email: string): Promise<string> {
+  const encoded = Buffer.from(email).toString('base64');
+  return `${encoded}.${await sign(encoded)}`;
+}
+
+export async function setDemoCookie(email: string): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.set(DEMO_COOKIE, await encodeDemoCookie(email), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+  });
+}
+
+export async function getDemoEmail(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(DEMO_COOKIE)?.value;
+  if (!raw) return null;
+  const [encoded, sig] = raw.split('.');
+  if (!encoded || !sig || !timingSafeEqual(sig, await sign(encoded))) return null;
+  return Buffer.from(encoded, 'base64').toString('utf8');
+}
+
 export async function requireRole(roles: StaffRole[]): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) throw new Error('Unauthenticated');

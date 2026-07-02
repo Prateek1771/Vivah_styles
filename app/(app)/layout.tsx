@@ -8,7 +8,7 @@ import { Navbar } from '@/components/layout/Navbar';
 // Per-path role access is enforced in middleware.ts.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  if (!session) redirect('/');
+  if (!session) redirect('/login');
 
   return (
     <>

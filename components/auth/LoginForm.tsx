@@ -17,7 +17,7 @@ const ROLE_HOME: Record<StaffRole, string> = {
 // ponytail: demo-only credentials, drop before real deploy
 const DEMO_STORE_CODE = 'VIVAH01';
 
-export default function StorePage() {
+export function LoginForm() {
   const router = useRouter();
   const [storeCode, setStoreCode] = useState('');
   const [password, setPassword] = useState('');
