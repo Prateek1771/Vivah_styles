@@ -3,7 +3,7 @@
 ## Current Status
 
 **Current Phase:** Phase 3 COMPLETE → all 16 features done 🎉
-**Last Completed:** Feature 16 — Store Settings
+**Last Completed:** Post-build — public landing page at `/` + email-OTP demo gate
 **Next:** Nothing pending — full build (Features 01–16) shipped & verified
 
 ## Progress
@@ -38,6 +38,7 @@
 _Record every deviation from the context docs here: what changed, why, and which doc was updated._
 
 - (docs v2) Rental management cancelled by user — fully removed from all docs.
+- (post-build) **Landing page + demo gate:** static marketing page (`public/index.html` + `public/assets/`) now serves `/` via a rewrite in `next.config.ts`; store gate moved `/` → `/login` (form extracted to `components/auth/LoginForm.tsx`). New `/try` page: visitors verify their email with a 6-digit InsForge OTP (`auth.signUp` with throwaway password + `verifyEmail`) before reaching `/login`; verified emails tracked in new InsForge table `demo_visitors` (email, verified_at, last_visit_at, visits). Signed `vivah_demo` cookie (30d) gates `/login` and `POST /api/auth/login`; returning verified emails skip the OTP and just increment `visits`. `proxy.ts` allowlist updated (`/`, `/login`, `/try`, dotted static paths) and unauthenticated redirects now go to `/login`.
 - (docs v2) Appointment scheduling removed — not in revised spec.
 - (docs v2) Trial tracking statuses removed — not in revised spec.
 - (docs v2) Complex returns & exchanges (policy types, approval workflow, return reasons) replaced by a simple dress_id + notes form.
