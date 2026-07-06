@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/Button';
@@ -57,6 +57,12 @@ export function ExploreClient({
   const [coupleOpen, setCoupleOpen] = useState(isCouple || comboOn);
 
   const suggestActive = scores !== null;
+
+  // Auto-apply onboarding preferences when arriving from a styling session.
+  useEffect(() => {
+    if (sessionId) shopSuggested();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   const filtered = useMemo(() => {
     return items.filter((i) => {
@@ -134,6 +140,13 @@ export function ExploreClient({
       (b): b is { label: Bucket; item: InventoryItem } => Boolean(b.item),
     );
   }, [buckets, itemById]);
+  const showCurated = suggestActive && !kidsMode && curated.length > 0;
+  // Curated winners already render in their own row — keep them out of the grid.
+  const gridItems = useMemo(() => {
+    if (!showCurated) return ordered;
+    const curatedIds = new Set(curated.map((c) => c.item.id));
+    return ordered.filter((i) => !curatedIds.has(i.id));
+  }, [ordered, curated, showCurated]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -249,7 +262,7 @@ export function ExploreClient({
 
       {coupleOpen && <CoupleLooks />}
 
-      {suggestActive && !kidsMode && curated.length > 0 && (
+      {showCurated && (
         <div className="flex flex-col gap-3">
           <h2 className="font-display text-lg font-semibold text-ink">Curated for this customer</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -263,13 +276,13 @@ export function ExploreClient({
         </div>
       )}
 
-      {ordered.length === 0 ? (
+      {gridItems.length === 0 ? (
         <div className="rounded-[--radius-card] border border-dashed border-border py-16 text-center text-sm text-ink-muted">
           No dresses match your filters. Try clearing some filters.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {ordered.map((item) => {
+          {gridItems.map((item) => {
             const score = suggestActive && !kidsMode ? scores!.get(item.id) ?? null : null;
             const dimmed = suggestActive && !kidsMode && !scores!.has(item.id);
             return (

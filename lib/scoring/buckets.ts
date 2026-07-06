@@ -19,23 +19,30 @@ export const BUCKETS: Bucket[] = [
   'Hidden Gem',
 ];
 
-// Pure port of the reference design's ranker.categorize: pick one standout per bucket.
-// ponytail: overlap allowed — the same item may win several buckets on a small catalogue;
-// de-dup later if it looks repetitive.
-function pickBy(scored: ScoredItem[], rank: (s: ScoredItem) => number): string {
-  return scored.reduce((best, s) => (rank(s) > rank(best) ? s : best)).item.id;
-}
-
+// Pick one standout per bucket, greedily in BUCKETS priority order without
+// replacement — each item wins at most one bucket. On a small catalogue the
+// pool runs out and later buckets are simply omitted.
 export function categorize(scored: ScoredItem[]): Partial<Record<Bucket, string>> {
   if (!scored.length) return {};
   const attrs = new Map(scored.map((s) => [s.item.id, deriveAttrs(s.item)]));
   const a = (s: ScoredItem) => attrs.get(s.item.id)!;
-  return {
-    'Best Overall': pickBy(scored, (s) => s.matchScore),
-    'Most Premium': pickBy(scored, (s) => a(s).luxuryScore * 1000 + s.matchScore),
-    'Most Trending': pickBy(scored, (s) => a(s).trendScore * 1000 + s.matchScore),
-    'Safest Choice': pickBy(scored, (s) => s.components.occasion * 1000 + s.matchScore),
-    "Editor's Pick": pickBy(scored, (s) => a(s).embroideryLevel * 1000 + s.matchScore),
-    'Hidden Gem': pickBy(scored, (s) => s.matchScore - a(s).trendScore * 3),
+  const rankers: Record<Bucket, (s: ScoredItem) => number> = {
+    'Best Overall': (s) => s.matchScore,
+    'Most Premium': (s) => a(s).luxuryScore * 1000 + s.matchScore,
+    'Most Trending': (s) => a(s).trendScore * 1000 + s.matchScore,
+    'Safest Choice': (s) => s.components.occasion * 1000 + s.matchScore,
+    "Editor's Pick": (s) => a(s).embroideryLevel * 1000 + s.matchScore,
+    'Hidden Gem': (s) => s.matchScore - a(s).trendScore * 3,
   };
+  const result: Partial<Record<Bucket, string>> = {};
+  const used = new Set<string>();
+  for (const bucket of BUCKETS) {
+    const pool = scored.filter((s) => !used.has(s.item.id));
+    if (!pool.length) break;
+    const rank = rankers[bucket];
+    const winner = pool.reduce((best, s) => (rank(s) > rank(best) ? s : best));
+    result[bucket] = winner.item.id;
+    used.add(winner.item.id);
+  }
+  return result;
 }
