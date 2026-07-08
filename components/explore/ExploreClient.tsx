@@ -260,7 +260,7 @@ export function ExploreClient({
         </div>
       )}
 
-      {coupleOpen && <CoupleLooks />}
+      {coupleOpen && <CoupleLooks sessionId={sessionId} />}
 
       {showCurated && (
         <div className="flex flex-col gap-3">

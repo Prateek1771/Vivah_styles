@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
+import { Overlay } from '@/components/dress/tryon-ui';
+import { TryonImageViewer } from '@/components/dress/TryonImageViewer';
+
 export interface GalleryTryon {
   id: string;
-  itemId: string;
+  itemId: string | null; // null for couple-look try-ons
   name: string;
   image: string | null;
   createdAt: string;
@@ -18,6 +21,7 @@ const fmtDate = (iso: string) =>
 export function TryOnGalleryModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const [tryons, setTryons] = useState<GalleryTryon[] | null>(null);
   const [error, setError] = useState('');
+  const [viewing, setViewing] = useState<GalleryTryon | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -66,24 +70,40 @@ export function TryOnGalleryModal({ sessionId, onClose }: { sessionId: string; o
                   <div className="flex h-full w-full items-center justify-center text-[10px] text-ink-muted">No image</div>
                 )}
               </div>
-              <div className="h-32 w-24 flex-none overflow-hidden rounded-[--radius-input] bg-surface-soft">
+              <button
+                type="button"
+                onClick={() => setViewing(t)}
+                className="h-32 w-24 flex-none overflow-hidden rounded-[--radius-input] bg-surface-soft"
+                aria-label={`View ${t.name} preview`}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/api/tryon/${t.id}/image`} alt={`${t.name} preview`} className="h-full w-full object-cover" />
-              </div>
+              </button>
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <h3 className="line-clamp-2 font-display text-sm font-semibold text-ink">{t.name}</h3>
                 <p className="text-xs text-ink-muted">{fmtDate(t.createdAt)}</p>
-                <Link
-                  href={`/explore/${t.itemId}?session=${sessionId}`}
-                  className="mt-auto text-sm font-semibold text-primary hover:underline"
-                >
-                  Try Another Dress →
-                </Link>
+                {t.itemId && (
+                  <Link
+                    href={`/explore/${t.itemId}?session=${sessionId}`}
+                    className="mt-auto text-sm font-semibold text-primary hover:underline"
+                  >
+                    Try Another Dress →
+                  </Link>
+                )}
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {viewing && (
+        // stopPropagation so closing the viewer doesn't also close the gallery behind it
+        <div onClick={(e) => e.stopPropagation()}>
+          <Overlay onClose={() => setViewing(null)}>
+            <TryonImageViewer src={`/api/tryon/${viewing.id}/image`} downloadName={`tryon-${viewing.id}.jpg`} />
+          </Overlay>
+        </div>
+      )}
     </div>
   );
 }

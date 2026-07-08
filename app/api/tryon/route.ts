@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { createServerClient } from '@/lib/insforge/server';
 import { captureServerEvent } from '@/lib/posthog';
 import { downloadCustomerPhoto, uploadTryonPreview } from '@/lib/insforge/storage';
+import { COUPLE_LOOKS } from '@/lib/couple-looks';
 
 // OpenAI gpt-image-2 image edit: person (image 1) + garment (image 2) in, base64 JPEG out.
 // Prompt follows the image-gen prompting guide's try-on pattern: explicit identity
@@ -9,24 +10,41 @@ import { downloadCustomerPhoto, uploadTryonPreview } from '@/lib/insforge/storag
 const TRYON_PROMPT =
   'Virtual try-on: dress the person from image 1 in the garment from image 2. ' +
   'Photorealistic. Preserve the person\'s identity exactly — face, skin tone, hair, ' +
-  'body shape, pose, and background unchanged. The garment should drape naturally with ' +
+  'body shape, pose, and background unchanged. If the photo shows more than one person, ' +
+  'dress only the person the garment is intended for and keep every other person in the ' +
+  'photo completely unchanged — do not remove or alter them. The garment should drape naturally with ' +
   'realistic fabric behavior, folds, and fit — no pasted-on look. ' +
   'Do not add text, watermarks, logos, or new elements.';
 
-async function callGptImage(person: Blob, garment: Blob): Promise<string> {
+// Couple-look try-on: image 2 is a couple photo, both outfits get transferred at once.
+const COUPLE_TRYON_PROMPT =
+  'Virtual try-on: image 1 shows a couple; image 2 shows another couple wearing outfits. ' +
+  'Dress the woman from image 1 in the bride\'s outfit from image 2 and the man from ' +
+  'image 1 in the groom\'s outfit from image 2. Photorealistic. Preserve both people\'s ' +
+  'identities exactly — faces, skin tones, hair, body shapes, poses, and background ' +
+  'unchanged. The garments should drape naturally with realistic fabric behavior, folds, ' +
+  'and fit — no pasted-on look. Do not add text, watermarks, logos, or new elements.';
+
+// InsForge downloads arrive as binary/octet-stream; OpenAI requires an image/* MIME type.
+function asImage(blob: Blob): Blob {
+  return blob.type.startsWith('image/') ? blob : new Blob([blob], { type: 'image/jpeg' });
+}
+
+async function callGptImage(person: Blob, garment: Blob, prompt = TRYON_PROMPT): Promise<string> {
   const form = new FormData();
   form.append('model', 'gpt-image-2');
-  form.append('image[]', person, 'person.jpg');
-  form.append('image[]', garment, 'garment.jpg');
-  form.append('prompt', TRYON_PROMPT);
+  form.append('image[]', asImage(person), 'person.jpg');
+  form.append('image[]', asImage(garment), 'garment.jpg');
+  form.append('prompt', prompt);
   form.append('size', '1024x1536'); // 3:4 portrait, matches the preview modal
-  form.append('quality', 'medium'); // identity-sensitive edit → medium+
+  form.append('quality', 'low'); // speed over fidelity — user wants fast previews
   form.append('output_format', 'jpeg'); // matches tryon-previews/{id}.jpg storage
   const res = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: form,
-    signal: AbortSignal.timeout(60_000),
+    // gpt-image-2 edits at 1024x1536 regularly take >60s; 60s timeouts aborted real generations.
+    signal: AbortSignal.timeout(180_000),
   });
   if (!res.ok) throw new Error(`OpenAI images/edits ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -37,15 +55,17 @@ async function callGptImage(person: Blob, garment: Blob): Promise<string> {
 
 export async function POST(req: Request) {
   const staff = await requireRole(['stylist', 'owner']);
-  const { sessionId, itemId } = await req.json();
-  if (typeof sessionId !== 'string' || typeof itemId !== 'string' || !sessionId || !itemId) {
+  const { sessionId, itemId, lookImg } = await req.json();
+  // Either an inventory item or a couple-look image (validated against the static list).
+  const isLook = typeof lookImg === 'string' && COUPLE_LOOKS.some((l) => l.img === lookImg);
+  if (typeof sessionId !== 'string' || !sessionId || (!isLook && (typeof itemId !== 'string' || !itemId))) {
     return Response.json({ ok: false, error: 'Missing session or item.' }, { status: 400 });
   }
   const db = createServerClient().database;
 
   const { data: tryon, error: insErr } = await db
     .from('tryons')
-    .insert({ session_id: sessionId, item_id: itemId, status: 'generating' })
+    .insert({ session_id: sessionId, item_id: isLook ? null : itemId, status: 'generating' })
     .select()
     .single();
   if (insErr || !tryon) {
@@ -55,23 +75,30 @@ export async function POST(req: Request) {
   const tryonId = tryon.id as string;
 
   try {
-    const { data: item, error: itemErr } = await db
-      .from('inventory_items')
-      .select('images')
-      .eq('id', itemId)
-      .single();
-    if (itemErr) throw itemErr;
-    const garmentUrl = (item?.images as string[] | undefined)?.[0];
-    if (!garmentUrl) throw new Error('No garment image');
+    let garmentUrl: string;
+    if (isLook) {
+      garmentUrl = new URL(lookImg, req.url).toString(); // served from public/couples/
+    } else {
+      const { data: item, error: itemErr } = await db
+        .from('inventory_items')
+        .select('images')
+        .eq('id', itemId)
+        .single();
+      if (itemErr) throw itemErr;
+      const url = (item?.images as string[] | undefined)?.[0];
+      if (!url) throw new Error('No garment image');
+      garmentUrl = url;
+    }
 
     const person = await downloadCustomerPhoto(sessionId);
     const garment = await (await fetch(garmentUrl)).blob();
+    const prompt = isLook ? COUPLE_TRYON_PROMPT : TRYON_PROMPT;
 
     let base64: string;
     try {
-      base64 = await callGptImage(person, garment);
+      base64 = await callGptImage(person, garment, prompt);
     } catch {
-      base64 = await callGptImage(person, garment); // one retry
+      base64 = await callGptImage(person, garment, prompt); // one retry
     }
 
     let url: string;
@@ -113,7 +140,7 @@ export async function GET(req: Request) {
       return {
         id: t.id as string,
         itemId: (item?.id ?? t.item_id) as string,
-        name: item?.name ?? 'Dress',
+        name: item?.name ?? (t.item_id ? 'Dress' : 'Couple Look'),
         image: item?.images?.[0] ?? null,
         createdAt: t.created_at as string,
       };
