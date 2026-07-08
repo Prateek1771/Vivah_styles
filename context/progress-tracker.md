@@ -3,7 +3,7 @@
 ## Current Status
 
 **Current Phase:** Phase 3 COMPLETE → all 16 features done 🎉
-**Last Completed:** Post-build — public landing page at `/` + email-OTP demo gate
+**Last Completed:** Post-build — try-on backend swapped API4.AI → OpenAI gpt-image-2
 **Next:** Nothing pending — full build (Features 01–16) shipped & verified
 
 ## Progress
@@ -37,6 +37,7 @@
 
 _Record every deviation from the context docs here: what changed, why, and which doc was updated._
 
+- (post-build, 2026-07-08) **Try-on provider swapped API4.AI → OpenAI gpt-image-2** — the API4.AI demo endpoint became unreliable. Only `callApi4ai` in `app/api/tryon/route.ts` was replaced (now `callGptImage`: plain fetch to `/v1/images/edits`, multipart `image[]` person + garment, identity-preserve `TRYON_PROMPT` from OpenAI's image-gen prompting guide, `size 1024x1536`, `quality medium`, `output_format jpeg`, response `data[0].b64_json`). Same 60s timeout + one-retry contract; all other plumbing (storage, `tryons` table, gallery, streaming route, PostHog) unchanged. Data-URL and stream `Content-Type` fixed `image/png` → `image/jpeg`. Env: `OPENAI_API_KEY` (server-only) replaces `API4AI_KEY`/`API4AI_ENDPOINT`. Docs updated: CLAUDE.md, AGENTS.md, README, architecture, code-standards, library-docs, project-overview. Earlier API4.AI notes below are historical. **User must paste an OpenAI key into `.env.local` before try-on works.**
 - (docs v2) Rental management cancelled by user — fully removed from all docs.
 - (post-build) **Landing page + demo gate:** static marketing page (`public/index.html` + `public/assets/`) now serves `/` via a rewrite in `next.config.ts`; store gate moved `/` → `/login` (form extracted to `components/auth/LoginForm.tsx`). New `/try` page: visitors verify their email with a 6-digit InsForge OTP (`auth.signUp` with throwaway password + `verifyEmail`) before reaching `/login`; verified emails tracked in new InsForge table `demo_visitors` (email, verified_at, last_visit_at, visits). Signed `vivah_demo` cookie (30d) gates `/login` and `POST /api/auth/login`; returning verified emails skip the OTP and just increment `visits`. `proxy.ts` allowlist updated (`/`, `/login`, `/try`, dotted static paths) and unauthenticated redirects now go to `/login`.
 - (docs v2) Appointment scheduling removed — not in revised spec.
@@ -113,11 +114,10 @@ _Record every deviation from the context docs here: what changed, why, and which
 
 _Workarounds, vendor quirks, and anything the next session needs to know._
 
-- API4.AI demo endpoint (`demo.api4ai.cloud`) works without a key for development. Production endpoint + auth header type depends on the key source — verify at Feature 13 and update `library-docs.md`.
+- Try-on now runs on OpenAI gpt-image-2 (`OPENAI_API_KEY` server-only, see the 2026-07-08 decision above). API4.AI notes elsewhere in this file are historical.
 - Groq Vision response includes unknown enum values sometimes (e.g. color names not in `COLORS`); `sanitiseAutoFill()` in `library-docs.md` silently drops them rather than failing the whole auto-fill.
 - `dress_id` is the primary human-readable lookup key for billing and returns — generated as `{CATEGORY_PREFIX}-{4-digit-seq}` (e.g. `SHER-0042`). Collision check on insert.
 - `styling_sessions.customer_photo_url` column (text | null) should be added to the schema (noted in Feature 12 — verify architecture.md is updated when implementing Feature 12).
-- **Before Feature 13:** spike API4.AI production auth — verify the correct auth header (RapidAPI vs direct endpoint) using the production key. Update `library-docs.md` with the confirmed `authHeaders()` pattern before committing to the Feature 13 build estimate.
 - Kids sessions (Feature 10): scoring engine is skipped entirely; explore page shows all active items with a note: "Score-based matching is not available for kids — browsing all items." No gender or category hard-filter applies.
 - DressCard links (Features 09 onward) must include `?session=${sessionId}` to propagate session context into dress detail pages, enabling match score display and the try-on flow.
 - (Feature 14) **Couple combo matching live.** `POST /api/couple {sessionId, itemId}` maps the session → `SessionPreferences`, runs the pre-built `suggestPartnerOutfits(anchor, prefs, items)` (top-5 partner-gender outfits, combined = 0.6×coupleCompat + 0.4×individual), and returns each partner's `overall` + the three sub-scores (recomputed via `coupleCompatibility`, since `ScoredItem` doesn't carry them). No DB write — results are ephemeral and cached client-side per anchor for the session.

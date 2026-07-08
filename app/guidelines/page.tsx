@@ -553,7 +553,7 @@ section { padding: 64px 0; border-top: 1px solid var(--border); }
                 <div className="anim-card">
                   <div className="anim-demo-area"><div className="spinner" /></div>
                   <div className="anim-label">Loading State</div>
-                  <div className="anim-desc">Spinner during Groq Vision & API4.AI generation. 0.8s linear loop.</div>
+                  <div className="anim-desc">Spinner during Groq Vision & gpt-image-2 generation. 0.8s linear loop.</div>
                 </div>
                 <div className="anim-card">
                   <div className="anim-demo-area"><div className="stagger-demo"><div className="stagger-line" /><div className="stagger-line" /><div className="stagger-line" /></div></div>

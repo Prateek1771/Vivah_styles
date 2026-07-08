@@ -22,7 +22,7 @@ VivahStyle is a **staff-operated in-store platform** for Indian wedding fashion 
 | UI | React 19 + Tailwind CSS **v4** | `@theme` directive in `globals.css` — no `tailwind.config.js` for colors |
 | Database + Storage | `@insforge/sdk` | NOT Supabase. See patterns below |
 | Inventory Auto-Fill | `groq-sdk` + Groq Vision | `meta-llama/llama-4-scout-17b-16e-instruct`, server-only |
-| Virtual Try-On | API4.AI | `API4AI_KEY` + `API4AI_ENDPOINT`, server-only |
+| Virtual Try-On | OpenAI gpt-image-2 (`/v1/images/edits`) | `OPENAI_API_KEY`, server-only, plain fetch (no SDK) |
 | Analytics | `posthog-js` + `posthog-node` | Exactly 7 events — no more |
 | Charts | `recharts` | Dashboard only |
 | Validation | `zod` | Actions and route handlers |
@@ -123,7 +123,7 @@ const { data } = await storage
   .from('customer-photos')
   .upload(`${sessionId}.jpg`, photoBlob);
 
-// Download from private bucket (for API4.AI — pass blob directly, no signed URLs)
+// Download from private bucket (for the try-on call — pass blob directly, no signed URLs)
 const { data: blob } = await storage
   .from('customer-photos')
   .download(`${sessionId}.jpg`);
@@ -132,7 +132,7 @@ const { data: blob } = await storage
 await storage.from('customer-photos').remove(`${sessionId}.jpg`);
 ```
 
-**Note on try-on flow:** The InsForge SDK does not expose `createSignedUrl`. For the API4.AI try-on call (Feature 13), download the customer photo server-side as a Blob and append it to the multipart FormData directly instead of passing a signed URL.
+**Note on try-on flow:** The InsForge SDK does not expose `createSignedUrl`. For the gpt-image-2 try-on call (Feature 13), download the customer photo server-side as a Blob and append it to the multipart FormData directly instead of passing a signed URL.
 
 ---
 
@@ -155,7 +155,7 @@ await storage.from('customer-photos').remove(`${sessionId}.jpg`);
 2. All prices via `formatINR()` from `lib/format.ts`.
 3. `lib/scoring/` is pure — no DB calls, no fetch, no `Date.now()`, no randomness.
 4. `requireRole()` from `lib/auth.ts` at the top of every server action AND route handler.
-5. `GROQ_API_KEY`, `API4AI_KEY`, `SESSION_SECRET` are server-only — never in client bundles.
+5. `GROQ_API_KEY`, `OPENAI_API_KEY`, `SESSION_SECRET` are server-only — never in client bundles.
 6. No hex values in components — tokens only (from `context/ui-tokens.md` / `globals.css`).
 7. Playfair Display for headings only; Inter for everything else.
 8. No component libraries (shadcn, MUI, Radix). No state managers. No LLM for recommendations.
@@ -211,5 +211,5 @@ globals.css                   → @theme tokens (Tailwind v4)
 | `context/code-standards.md` | TypeScript rules, component structure, error handling |
 | `context/ui-tokens.md` | Every design token and how to use it |
 | `context/ui-registry.md` | Existing components — reuse before building |
-| `context/library-docs.md` | Groq, API4.AI, PostHog, scoring engine contracts |
+| `context/library-docs.md` | Groq, gpt-image-2, PostHog, scoring engine contracts |
 | `context/progress-tracker.md` | Current feature, decisions made |

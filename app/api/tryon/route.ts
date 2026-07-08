@@ -3,20 +3,35 @@ import { createServerClient } from '@/lib/insforge/server';
 import { captureServerEvent } from '@/lib/posthog';
 import { downloadCustomerPhoto, uploadTryonPreview } from '@/lib/insforge/storage';
 
-// API4.AI demo contract (verified): multipart file fields `image` (person) + `image-apparel`
-// (garment); response `results[0].entities[0].image` is base64.
-async function callApi4ai(person: Blob, garment: Blob): Promise<string> {
+// OpenAI gpt-image-2 image edit: person (image 1) + garment (image 2) in, base64 JPEG out.
+// Prompt follows the image-gen prompting guide's try-on pattern: explicit identity
+// preserve-list, restated every call to prevent drift.
+const TRYON_PROMPT =
+  'Virtual try-on: dress the person from image 1 in the garment from image 2. ' +
+  'Photorealistic. Preserve the person\'s identity exactly — face, skin tone, hair, ' +
+  'body shape, pose, and background unchanged. The garment should drape naturally with ' +
+  'realistic fabric behavior, folds, and fit — no pasted-on look. ' +
+  'Do not add text, watermarks, logos, or new elements.';
+
+async function callGptImage(person: Blob, garment: Blob): Promise<string> {
   const form = new FormData();
-  form.append('image', person, 'person.jpg');
-  form.append('image-apparel', garment, 'garment.jpg');
-  const res = await fetch(process.env.API4AI_ENDPOINT!, {
+  form.append('model', 'gpt-image-2');
+  form.append('image[]', person, 'person.jpg');
+  form.append('image[]', garment, 'garment.jpg');
+  form.append('prompt', TRYON_PROMPT);
+  form.append('size', '1024x1536'); // 3:4 portrait, matches the preview modal
+  form.append('quality', 'medium'); // identity-sensitive edit → medium+
+  form.append('output_format', 'jpeg'); // matches tryon-previews/{id}.jpg storage
+  const res = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: form,
     signal: AbortSignal.timeout(60_000),
   });
+  if (!res.ok) throw new Error(`OpenAI images/edits ${res.status}: ${await res.text()}`);
   const data = await res.json();
-  const base64 = data?.results?.[0]?.entities?.[0]?.image;
-  if (typeof base64 !== 'string' || !base64) throw new Error('No image in API4.AI response');
+  const base64 = data?.data?.[0]?.b64_json;
+  if (typeof base64 !== 'string' || !base64) throw new Error('No image in OpenAI response');
   return base64;
 }
 
@@ -54,9 +69,9 @@ export async function POST(req: Request) {
 
     let base64: string;
     try {
-      base64 = await callApi4ai(person, garment);
+      base64 = await callGptImage(person, garment);
     } catch {
-      base64 = await callApi4ai(person, garment); // one retry
+      base64 = await callGptImage(person, garment); // one retry
     }
 
     let url: string;
@@ -64,13 +79,13 @@ export async function POST(req: Request) {
       url = await uploadTryonPreview(tryonId, base64);
     } catch {
       // InsForge presigned upload is occasionally flaky; retry once before failing
-      // the whole try-on (the costly API4.AI generation has already succeeded here).
+      // the whole try-on (the costly gpt-image-2 generation has already succeeded here).
       url = await uploadTryonPreview(tryonId, base64);
     }
     await db.from('tryons').update({ status: 'ready', result_image_url: url }).eq('id', tryonId);
     void captureServerEvent(staff.staffId, 'tryon_generated', { sessionId, itemId, success: true });
 
-    return Response.json({ ok: true, data: { tryonId, image: `data:image/png;base64,${base64}` } });
+    return Response.json({ ok: true, data: { tryonId, image: `data:image/jpeg;base64,${base64}` } });
   } catch (error) {
     console.error('[tryon] generate failed:', error);
     await db.from('tryons').update({ status: 'failed' }).eq('id', tryonId);

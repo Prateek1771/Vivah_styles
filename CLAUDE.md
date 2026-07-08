@@ -14,7 +14,7 @@ Read these docs before starting any feature:
 | `context/code-standards.md` | TypeScript rules, file naming, component structure, error handling |
 | `context/ui-tokens.md` | All design tokens — use these, never hardcode hex values |
 | `context/ui-registry.md` | Existing components — check before building a new one |
-| `context/library-docs.md` | InsForge, Groq, API4.AI, PostHog usage patterns |
+| `context/library-docs.md` | InsForge, Groq, gpt-image-2, PostHog usage patterns |
 | `context/progress-tracker.md` | What's done, decisions made, notes for next session |
 
 ## Stack
@@ -23,7 +23,7 @@ Read these docs before starting any feature:
 - Tailwind CSS v4 (tokens in `globals.css` via `@theme`)
 - InsForge (`@insforge/sdk`) — database + storage
 - Groq Vision — inventory auto-fill
-- API4.AI — virtual try-on
+- OpenAI gpt-image-2 — virtual try-on
 - PostHog — analytics (exactly 7 events, defined in `project-overview.md`)
 
 ## Build Approach
@@ -39,7 +39,7 @@ Read these docs before starting any feature:
 - All prices rendered with `formatINR()` from `lib/format.ts`.
 - `lib/scoring/` is pure: no DB, no fetch, no `Date.now()`, no randomness.
 - Role checks in `middleware.ts` AND in every server action/route handler (`requireRole()`).
-- `GROQ_API_KEY` and `API4AI_KEY` are server-only — never in client bundles.
+- `GROQ_API_KEY` and `OPENAI_API_KEY` are server-only — never in client bundles.
 - No hex values in components — tokens only (see `context/ui-tokens.md`).
 - Playfair Display for headings only; Inter for everything else.
 - No component libraries (shadcn, MUI). No state managers. No LLM SDK for recommendations.
@@ -72,8 +72,7 @@ middleware.ts
 ```
 NEXT_PUBLIC_INSFORGE_URL
 NEXT_PUBLIC_INSFORGE_ANON_KEY
-API4AI_KEY               (server only)
-API4AI_ENDPOINT          (server only)
+OPENAI_API_KEY           (server only)
 GROQ_API_KEY             (server only)
 SESSION_SECRET           (server only)
 NEXT_PUBLIC_POSTHOG_KEY

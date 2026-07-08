@@ -11,7 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (error || !data) throw error ?? new Error('not found');
     const buf = await data.arrayBuffer();
     return new Response(buf, {
-      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=300' },
+      headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=300' },
     });
   } catch (error) {
     console.error('[tryon] image stream failed:', error);

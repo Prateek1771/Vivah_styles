@@ -335,12 +335,12 @@ const data = JSON.parse(completion.choices[0].message.content!);
 
 - `POST /api/tryon { sessionId, itemId }`:
   1. INSERT `tryons` (status: `generating`)
-  2. Create signed URL for `customer-photos/{sessionId}.jpg` (10 min expiry)
-  3. Call API4.AI multipart — `url` = person signed URL, `url-apparel` = inventory image public URL
-  4. On success: decode `results[0].entities[0].image` (base64 JPEG) → upload to `tryon-previews/{tryonId}.jpg`
+  2. Download `customer-photos/{sessionId}.jpg` server-side as a Blob (SDK has no signed URLs)
+  3. Call OpenAI gpt-image-2 `/v1/images/edits` multipart — `image[]` = person Blob + garment Blob, identity-preserve prompt (see `library-docs.md`)
+  4. On success: decode `data[0].b64_json` (base64 JPEG) → upload to `tryon-previews/{tryonId}.jpg`
   5. UPDATE `tryons` (status: `ready`, result_image_url)
 - 60s timeout; one automatic retry on network/5xx; then `status: 'failed'`
-- API4.AI key server-only
+- OpenAI key server-only
 
 **PostHog events:** `tryon_generated`
 

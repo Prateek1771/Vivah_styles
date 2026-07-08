@@ -43,7 +43,7 @@ The browser (staff devices) hits the **store gate** (`app/page.tsx`), which logs
 - `lib/insforge/` — DB + storage access (`client.ts`, `server.ts`, `storage.ts`)
 - `lib/constants.ts` (enums), `lib/format.ts` (`formatINR`), `lib/posthog.ts` (7 events)
 
-External services: **InsForge** (Postgres DB + storage), **Groq Vision** (inventory auto-fill), **API4.AI** (virtual try-on), **PostHog** (analytics). Detailed boundaries, data-flow diagrams, and the full schema are in [`context/architecture.md`](context/architecture.md).
+External services: **InsForge** (Postgres DB + storage), **Groq Vision** (inventory auto-fill), **OpenAI gpt-image-2** (virtual try-on), **PostHog** (analytics). Detailed boundaries, data-flow diagrams, and the full schema are in [`context/architecture.md`](context/architecture.md).
 
 ---
 
@@ -55,7 +55,7 @@ External services: **InsForge** (Postgres DB + storage), **Groq Vision** (invent
 | UI | **Tailwind CSS v4** — tokens in `app/globals.css` via `@theme`; Playfair Display (headings) + Inter (body) |
 | Database / Storage | **InsForge** (`@insforge/sdk`) — Postgres + file buckets |
 | Inventory auto-fill | **Groq Vision** (`meta-llama/llama-4-scout-17b-16e-instruct`) |
-| Virtual try-on | **API4.AI** Virtual Try-On |
+| Virtual try-on | **OpenAI gpt-image-2** (`/v1/images/edits`) |
 | Recommendations | Internal `lib/scoring/` — deterministic weighted matching, **no LLM** |
 | Analytics | **PostHog** — 7 fixed product events |
 | Auth | Custom HMAC cookie session + `bcryptjs` password hashing (no third-party auth lib) |
@@ -107,7 +107,7 @@ Store gate  →  Onboarding (~2 min)  →  Explore grid
 - **Inventory management** — table UI + CRUD, with **Groq Vision auto-fill**: drop a dress photo and name / category / gender / colors / occasion tags / fabric / suggested price are populated (all editable)
 - **Customer onboarding** — single-page form (name, age, shopping-for, multi-select occasions, category preference, optional skin tone, couple-combo toggle, price range) → creates a `styling_sessions` row
 - **Explore grid** — sort + filter (gender, category, color, price); **"Shop Suggested"** runs the scoring engine and filters to matched items with a score badge
-- **Virtual try-on** — "✨ Preview My Look": customer photo (with consent) + garment → API4.AI preview, plus a per-session try-on gallery. Works in a styling session *or* as an ad-hoc walk-in preview.
+- **Virtual try-on** — "✨ Preview My Look": customer photo (with consent) + garment → gpt-image-2 preview, plus a per-session try-on gallery. Works in a styling session *or* as an ad-hoc walk-in preview.
 - **Couple combo matching** — for couples, find harmonious bride + groom outfit pairs (color harmony, theme, fabric), plus a real-photo inspiration gallery
 - **Billing** — `dress_id` cart, quantity per line, payment modes (Cash / UPI / Card / Net Banking) with mode-specific field; tax computed server-side; printable invoice. **No payment is processed — record-keeping only.**
 - **Returns** — simple `dress_id` + notes form (record-only in V1; stock is reconciled manually)
@@ -189,15 +189,14 @@ Scripts: `npm run dev` · `npm run build` · `npm run start` · `npm run lint` �
 NEXT_PUBLIC_INSFORGE_URL
 NEXT_PUBLIC_INSFORGE_ANON_KEY
 INSFORGE_API_KEY          # server only — privileged key for storage writes
-API4AI_KEY                # server only
-API4AI_ENDPOINT           # server only
+OPENAI_API_KEY            # server only — gpt-image-2 virtual try-on
 GROQ_API_KEY              # server only
 SESSION_SECRET            # server only — HMAC session signing
 NEXT_PUBLIC_POSTHOG_KEY
 NEXT_PUBLIC_POSTHOG_HOST
 ```
 
-`GROQ_API_KEY`, `API4AI_KEY`, `INSFORGE_API_KEY`, and `SESSION_SECRET` are **server-only** — never shipped to the client bundle.
+`GROQ_API_KEY`, `OPENAI_API_KEY`, `INSFORGE_API_KEY`, and `SESSION_SECRET` are **server-only** — never shipped to the client bundle.
 
 ### Seeding inventory (optional)
 
@@ -225,7 +224,7 @@ Store code: `VIVAH01`
 
 1. `lib/scoring/` is **pure** — same inputs, same outputs; no DB, no fetch, no randomness.
 2. Role checks happen in `middleware.ts` **and** in every server action / route handler (`requireRole()`).
-3. `GROQ_API_KEY` and `API4AI_KEY` are **server-side only**; the client never calls either directly.
+3. `GROQ_API_KEY` and `OPENAI_API_KEY` are **server-side only**; the client never calls either directly.
 4. All enum strings (categories, occasions, payment modes, statuses) come from `lib/constants.ts` — one source of truth.
 5. Prices are stored as ₹ numerics and rendered with `formatINR()` from `lib/format.ts`.
 6. `dress_id` is unique, never reused — the primary lookup key for billing and returns.
@@ -246,7 +245,7 @@ Detailed specs live in `context/` (linked, not duplicated here):
 | [`context/code-standards.md`](context/code-standards.md) | TypeScript rules, file naming, components, errors |
 | [`context/ui-tokens.md`](context/ui-tokens.md) | Design tokens |
 | [`context/ui-registry.md`](context/ui-registry.md) | Existing components |
-| [`context/library-docs.md`](context/library-docs.md) | InsForge, Groq, API4.AI, PostHog usage |
+| [`context/library-docs.md`](context/library-docs.md) | InsForge, Groq, gpt-image-2, PostHog usage |
 | [`context/progress-tracker.md`](context/progress-tracker.md) | Build status & decisions |
 
 See also [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) for the agent-facing reference.

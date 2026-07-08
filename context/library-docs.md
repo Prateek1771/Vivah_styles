@@ -80,10 +80,9 @@ const url = storage.from('inventory-images').getPublicUrl(`${itemId}/0.jpg`);
 // Upload customer photo (private bucket)
 await storage.from('customer-photos').upload(`${sessionId}.jpg`, file);
 
-// Signed URL for private buckets (short expiry for API4.AI call)
-const { data } = await storage
-  .from('customer-photos')
-  .createSignedUrl(`${sessionId}.jpg`, 600); // 10 min
+// Download from private bucket (customer photo passed as Blob to the try-on call —
+// the SDK has no createSignedUrl)
+const { data } = await storage.from('customer-photos').download(`${sessionId}.jpg`);
 
 // Try-on preview upload
 await storage.from('tryon-previews').upload(`${tryonId}.jpg`, buffer);
@@ -177,66 +176,49 @@ function sanitiseAutoFill(raw: Record<string, unknown>): InventoryAutoFill {
 
 ---
 
-## API4.AI Virtual Try-On
+## OpenAI gpt-image-2 Virtual Try-On
 
-Docs: https://api4.ai/docs/virtual-try-on
+Docs: https://platform.openai.com/docs/api-reference/images/createEdit
+Prompting guide: openai-cookbook `examples/multimodal/image-gen-models-prompting-guide.ipynb`
 
-### Endpoint
+Replaced API4.AI (2026-07-08 — demo endpoint was unreliable). Env: `OPENAI_API_KEY` (server-only).
 
-| Mode | Endpoint |
-|---|---|
-| Demo (dev) | `https://demo.api4ai.cloud/virtual-try-on/v1/results` |
-| RapidAPI | `https://virtual-try-on7.p.rapidapi.com/v1/results` |
-
-Set `API4AI_ENDPOINT` and `API4AI_KEY` in env. Verify which auth header your key uses at Feature 13:
-- RapidAPI key → `X-RapidAPI-Key: <key>`
-- Direct api4.ai key → `A4A-CLIENT-ID: <key>`
-- Demo endpoint → no auth header needed
-
-### Request
+### Request (multipart, plain fetch — no SDK)
 
 ```typescript
 const form = new FormData();
-form.append('url', personSignedUrl);      // customer photo (10-min signed URL)
-form.append('url-apparel', garmentPublicUrl); // inventory image (public URL)
+form.append('model', 'gpt-image-2');
+form.append('image[]', personBlob, 'person.jpg');   // image 1: customer photo
+form.append('image[]', garmentBlob, 'garment.jpg'); // image 2: inventory image
+form.append('prompt', TRYON_PROMPT);
+form.append('size', '1024x1536');       // 3:4 portrait, matches the preview modal
+form.append('quality', 'medium');       // identity-sensitive edits need medium+
+form.append('output_format', 'jpeg');   // matches tryon-previews/{id}.jpg storage
 
-const res = await fetch(process.env.API4AI_ENDPOINT!, {
+const res = await fetch('https://api.openai.com/v1/images/edits', {
   method: 'POST',
-  headers: { [API4AI_HEADER_NAME]: process.env.API4AI_KEY! },
+  headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
   body: form,
   signal: AbortSignal.timeout(60_000),
 });
 ```
 
-### Response (verified against demo endpoint)
+Do NOT send `input_fidelity` — it's a legacy-model (`gpt-image-1.x`) param; gpt-image-2 has high fidelity built in.
 
-```json
-{
-  "results": [
-    {
-      "status": { "code": "ok", "message": "Success" },
-      "entities": [
-        {
-          "kind": "image",
-          "name": "person-in-apparel",
-          "image": "<base64-encoded JPEG>"
-        }
-      ]
-    }
-  ]
-}
-```
+### Response
 
-Extract path: `data.results[0].entities[0].image` → base64 JPEG → `Buffer.from(b64, 'base64')` → upload to `tryon-previews/{tryonId}.jpg`.
+Extract path: `data.data[0].b64_json` → base64 JPEG → upload to `tryon-previews/{tryonId}.jpg`.
 
-Check `data.results[0].status.code === 'ok'` before reading entities.
+### Prompt pattern (from the prompting guide)
+
+Reference inputs by index ("the person from image 1… the garment from image 2"), demand photorealism explicitly, and restate the identity preserve-list on every call (face, skin tone, hair, body shape, pose, background unchanged; realistic fabric behavior, no pasted-on look; no added text/watermarks/logos). See `TRYON_PROMPT` in `app/api/tryon/route.ts`.
 
 ### Rules
 
 - Timeout: 60s. One automatic retry on network/5xx. After that: `tryons.status = 'failed'` — never leave `generating`.
 - UI shows shimmer loading state during generation (~10–30s). Never block navigation.
 - Downscale person photos client-side to max 1024px before upload to the customer-photos bucket.
-- API4.AI key is server-only.
+- OpenAI key is server-only.
 
 ---
 

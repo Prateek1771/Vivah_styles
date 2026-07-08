@@ -146,14 +146,13 @@ Server-side events: use `posthog-node` client with `await posthog.shutdown()` (s
 |---|---|---|
 | `NEXT_PUBLIC_INSFORGE_URL` | client + server | InsForge base URL |
 | `NEXT_PUBLIC_INSFORGE_ANON_KEY` | client + server | InsForge anon key |
-| `API4AI_KEY` | server only | Virtual try-on API key |
-| `API4AI_ENDPOINT` | server only | Try-on endpoint URL |
+| `OPENAI_API_KEY` | server only | gpt-image-2 virtual try-on API key |
 | `GROQ_API_KEY` | server only | Groq vision API key for inventory auto-fill |
 | `SESSION_SECRET` | server only | HMAC key for `vivah_session` cookie |
 | `NEXT_PUBLIC_POSTHOG_KEY` | client + server | PostHog project key |
 | `NEXT_PUBLIC_POSTHOG_HOST` | client + server | PostHog host |
 
-`API4AI_KEY` and `GROQ_API_KEY` must never appear in client bundles.
+`OPENAI_API_KEY` and `GROQ_API_KEY` must never appear in client bundles.
 
 ## Constants (`lib/constants.ts`)
 

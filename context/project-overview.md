@@ -140,7 +140,7 @@ Individual dress page:
 - Full details: name, category, color, fabric, sizes, price, tags
 - **"✨ Preview My Look"** button — the virtual try-on feature:
   1. Stylist takes or uploads a photo of the customer (consent prompt shown)
-  2. API4.AI generates the customer wearing the dress
+  2. gpt-image-2 generates the customer wearing the dress
   3. Preview modal with options to try other dresses or save the preview
 - Try-on history for the session accessible via a gallery icon in the page header
 - "Add to Bill" button → navigates to `/billing` with this item pre-populated
@@ -198,7 +198,7 @@ Images: three InsForge storage buckets — `inventory-images` (public), `custome
 - Customer onboarding form (creates session)
 - Explore page with sort, filter, and "Shop Suggested" AI filter
 - Dress detail page with image gallery
-- Virtual try-on via API4.AI ("✨ Preview My Look")
+- Virtual try-on via OpenAI gpt-image-2 ("✨ Preview My Look")
 - Try-on gallery per session
 - Couple combo matching (harmonious outfit suggestions)
 - Billing / invoice (dress_id cart, payment modes, no payment processing)

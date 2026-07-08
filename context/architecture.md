@@ -7,7 +7,7 @@
 | Framework | Next.js 16 (App Router) | Pages, API routes, server actions |
 | UI | React 19 + Tailwind CSS v4 | Components and styling |
 | Database / Auth / Storage | InsForge | Postgres tables, file buckets |
-| Virtual Try-On | API4.AI Virtual Try-On | Person photo + garment image → preview |
+| Virtual Try-On | OpenAI gpt-image-2 (images/edits) | Person photo + garment image → preview |
 | Inventory Auto-Fill | Groq Vision (meta-llama/llama-4-scout-17b-16e-instruct) | Dress photo → auto-populate inventory fields |
 | Recommendation Engine | Internal (`lib/scoring`) | Deterministic weighted matching, no LLM |
 | Analytics | PostHog | Product events + owner dashboard |
@@ -41,7 +41,7 @@ app/
     auth/logout/route.ts            → Clears session cookie
     inventory/autofill/route.ts     → Groq vision → structured JSON
     recommendations/route.ts        → Scoring engine for Shop Suggested
-    tryon/route.ts                  → API4.AI call + preview storage
+    tryon/route.ts                  → gpt-image-2 call + preview storage
 components/
   ui/                               → Button, Card, Badge, Input, Select, ScoreBar, Table, ImageGallery
   layout/                           → Navbar, RoleNav, LogoutButton
@@ -71,7 +71,7 @@ middleware.ts                       → Route protection per role
 
 | Area | Owns | Must not |
 |---|---|---|
-| `app/(admin|cashier|stylist)/` | Pages, layouts, data fetching | Contain scoring logic, Groq calls, or API4.AI calls |
+| `app/(admin|cashier|stylist)/` | Pages, layouts, data fetching | Contain scoring logic, Groq calls, or OpenAI calls |
 | `app/api/` | Auth, auto-fill, recommendations, try-on | Render UI |
 | `lib/scoring/` | All match logic, pure functions | Touch DB, call fetch, import React |
 | `lib/insforge/` | DB and storage access | Contain business rules |
@@ -141,7 +141,7 @@ POST /api/tryon { sessionId, itemId }
 ↓
 INSERT tryons (status: 'generating')
 ↓
-API4.AI multipart POST { person photo URL, garment image URL }
+gpt-image-2 images/edits multipart POST { person photo Blob, garment image Blob, prompt }
 ↓
 Decode base64 → upload to tryon-previews bucket
 ↓
@@ -347,21 +347,26 @@ const data = JSON.parse(completion.choices[0].message.content!);
 
 Full contract in `library-docs.md`.
 
-## API4.AI Try-On Pattern
+## gpt-image-2 Try-On Pattern
 
 ```typescript
 const form = new FormData();
-form.append('url', personImageUrl);
-form.append('url-apparel', garmentPublicUrl);
+form.append('model', 'gpt-image-2');
+form.append('image[]', personBlob, 'person.jpg');
+form.append('image[]', garmentBlob, 'garment.jpg');
+form.append('prompt', TRYON_PROMPT);          // identity preserve-list, see library-docs.md
+form.append('size', '1024x1536');
+form.append('quality', 'medium');
+form.append('output_format', 'jpeg');
 
-const res = await fetch(process.env.API4AI_ENDPOINT!, {
+const res = await fetch('https://api.openai.com/v1/images/edits', {
   method: 'POST',
-  headers: authHeaders(),       // see library-docs.md
+  headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
   body: form,
   signal: AbortSignal.timeout(60_000),
 });
 const data = await res.json();
-const base64 = data.results[0].entities[0].image; // base64 JPEG
+const base64 = data.data[0].b64_json; // base64 JPEG
 ```
 
 ## Invariants
@@ -369,7 +374,7 @@ const base64 = data.results[0].entities[0].image; // base64 JPEG
 1. Every recommendation and try-on row references a `styling_sessions` row.
 2. Every `bill_items` row references a `bills` row; `bills.total_amount` equals the sum of its items.
 3. `lib/scoring/` is pure — same inputs, same outputs, always. No DB, no fetch, no randomness.
-4. The API4.AI key and Groq API key exist **server-side only**. The client never calls either directly.
+4. The OpenAI key and Groq API key exist **server-side only**. The client never calls either directly.
 5. All enum strings (categories, occasions, payment modes, statuses) come from `lib/constants.ts` — one source of truth.
 6. Role checks happen in `middleware.ts` AND in every server action/route handler.
 7. Prices are stored in ₹ as numerics; rendered with `formatINR()` from `lib/format.ts`.
