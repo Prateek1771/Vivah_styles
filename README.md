@@ -108,7 +108,7 @@ Store gate  →  Onboarding (~2 min)  →  Explore grid
 - **Customer onboarding** — single-page form (name, age, shopping-for, multi-select occasions, category preference, optional skin tone, couple-combo toggle, price range) → creates a `styling_sessions` row
 - **Explore grid** — sort + filter (gender, category, color, price); **"Shop Suggested"** runs the scoring engine and filters to matched items with a score badge
 - **Virtual try-on** — "✨ Preview My Look": customer photo (with consent) + garment → gpt-image-2 preview, plus a per-session try-on gallery. Works in a styling session *or* as an ad-hoc walk-in preview.
-- **Couple combo matching** — for couples, find harmonious bride + groom outfit pairs (color harmony, theme, fabric), plus a real-photo inspiration gallery
+- **Couple combo matching** — for couples, find harmonious bride + groom outfit pairs (color harmony, theme, fabric), plus a real-photo inspiration gallery whose looks can be **tried on directly** — one generation dresses both partners from the couple photo
 - **Billing** — `dress_id` cart, quantity per line, payment modes (Cash / UPI / Card / Net Banking) with mode-specific field; tax computed server-side; printable invoice. **No payment is processed — record-keeping only.**
 - **Returns** — simple `dress_id` + notes form (record-only in V1; stock is reconciled manually)
 - **Financial dashboard** — revenue, order count, AOV, revenue-by-payment-mode chart, recent bills, returns count, stock summary
