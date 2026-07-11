@@ -36,7 +36,7 @@ Most wedding boutiques run consultations ad-hoc: a customer walks in, staff ask 
 
 ![VivahStyle architecture diagram](public/readme-architecture.png)
 
-The browser (staff devices) hits the **store gate** (`app/page.tsx`), which logs in via `middleware.ts` — the role gate for all routes. Authenticated, role-gated pages live under a single `app/(app)/` group (dashboard, inventory, explore, billing, returns, onboarding, settings) sharing one `layout.tsx + Navbar`. Pages call **route handlers** in `app/api/` (auth, inventory, recommendations, tryon, couple) and **server actions**, which in turn use **core logic** in `lib/`:
+Visitors land on a static **marketing page** (`public/index.html`, served at `/`), pass the **demo email-OTP gate** (`/try` → `api/demo/*`, `demo_visitors` table, `vivah_demo` cookie), then reach the **store gate** (`/login`). `proxy.ts` (Next 16's middleware convention) is the role gate for all routes. Authenticated, role-gated pages live under a single `app/(app)/` group (dashboard, inventory, explore, billing, returns, onboarding, settings) sharing one `layout.tsx + Navbar`. Pages call **route handlers** in `app/api/` (auth, inventory, recommendations, tryon, couple) and **server actions**, which in turn use **core logic** in `lib/`:
 
 - `lib/auth.ts` — HMAC session signing + `requireRole()` guards
 - `lib/scoring/` — **pure** match logic (engine · couple · matrices · attributes · buckets)
@@ -54,8 +54,9 @@ External services: **InsForge** (Postgres DB + storage), **Groq Vision** (invent
 | Framework | **Next.js 16** (App Router) + **React 19** |
 | UI | **Tailwind CSS v4** — tokens in `app/globals.css` via `@theme`; Playfair Display (headings) + Inter (body) |
 | Database / Storage | **InsForge** (`@insforge/sdk`) — Postgres + file buckets |
-| Inventory auto-fill | **Groq Vision** (`meta-llama/llama-4-scout-17b-16e-instruct`) |
-| Virtual try-on | **OpenAI gpt-image-2** (`/v1/images/edits`) |
+| Inventory auto-fill | **Groq Vision** via `groq-sdk` (`meta-llama/llama-4-scout-17b-16e-instruct`) |
+| Virtual try-on | **OpenAI gpt-image-2** (`/v1/images/edits`, called via plain `fetch` — no OpenAI SDK) |
+| Charts | **Recharts** (financial dashboard) |
 | Recommendations | Internal `lib/scoring/` — deterministic weighted matching, **no LLM** |
 | Analytics | **PostHog** — 7 fixed product events |
 | Auth | Custom HMAC cookie session + `bcryptjs` password hashing (no third-party auth lib) |
@@ -66,7 +67,7 @@ No component libraries (shadcn/MUI), no state managers — by design.
 
 ## Roles
 
-Access is role-based, resolved from the password entered at the store gate. `middleware.ts` enforces per-route access, and every server action / route handler re-checks via `requireRole()`.
+Access is role-based, resolved from the password entered at the store gate. `proxy.ts` enforces per-route access, and every server action / route handler re-checks via `requireRole()`.
 
 | Role | Device | Can do |
 |---|---|---|
@@ -81,7 +82,9 @@ On login each role lands on its home page: Stylist → `/onboarding`, Cashier �
 ## Core Flow
 
 ```
-Store gate  →  Onboarding (~2 min)  →  Explore grid
+Landing page (/)  →  Demo OTP gate (/try)  →  Store gate (/login)
+                                          ↓
+              Onboarding (~2 min)  →  Explore grid
                                           → "Shop Suggested" (AI-scored matches)
                                           → Dress detail + ✨ Virtual Try-On
                                           → Billing  →  Dashboard
@@ -89,7 +92,9 @@ Store gate  →  Onboarding (~2 min)  →  Explore grid
 
 | Page | Route | Roles |
 |---|---|---|
-| Store gate | `/` | Everyone (pre-auth) |
+| Marketing landing page | `/` (static `public/index.html`) | Everyone |
+| Demo email-OTP gate | `/try` | Everyone (pre-auth) |
+| Store gate | `/login` | Everyone (pre-auth) |
 | Customer onboarding | `/onboarding` | Stylist, Owner |
 | Explore grid | `/explore` | Stylist, Owner |
 | Dress detail + try-on | `/explore/[id]` | Stylist, Owner |
@@ -143,6 +148,7 @@ All data lives in **InsForge** (Postgres). Core tables:
 | `tryons` | Generated try-on previews (`generating` → `ready` / `failed`) |
 | `bills` + `bill_items` | Billing records; `bill_number` serial invoice number |
 | `returns` | Simple record-only returns |
+| `demo_visitors` | Email-OTP demo gate visitors (`/try`) |
 
 **Storage buckets:** `inventory-images` (public), `customer-photos` (private), `tryon-previews` (private).
 
@@ -154,19 +160,23 @@ Full column-level schema in [`context/architecture.md`](context/architecture.md)
 
 ```
 app/
-  page.tsx                  → Store gate / login
+  login/                    → Store gate (staff login)
+  try/                      → Demo email-OTP gate
   (app)/                    → All role-gated pages (one group, role-aware nav)
     dashboard/ inventory/ explore/ billing/ returns/ onboarding/ settings/
-  api/                      → auth · inventory(autofill,lookup) · recommendations · tryon · couple
-components/                 → ui/ layout/ inventory/ billing/ explore/ dress/ onboarding/ dashboard/ settings/
+  api/                      → auth · demo(request-otp,verify-otp) · inventory(autofill,lookup)
+                              · recommendations · tryon · couple
+components/                 → ui/ layout/ auth/ inventory/ billing/ explore/ dress/
+                              onboarding/ dashboard/ returns/ settings/ · PostHogProvider.tsx
 lib/
-  insforge/                 → client.ts · server.ts · storage.ts
-  scoring/                  → engine.ts · couple.ts · matrices.ts · attributes.ts · buckets.ts  (PURE)
+  insforge/                 → client.ts · server.ts · storage.ts · types.ts
+  scoring/                  → engine.ts · couple.ts · matrices.ts · attributes.ts · buckets.ts
+                              · types.ts · *_check.mjs self-checks  (PURE)
   auth.ts · constants.ts · format.ts · posthog.ts · couple-looks.ts
-middleware.ts               → role gate
-scripts/                    → seed.mjs, import-core.mjs, enrich-dresses.mjs, scoring self-checks
+proxy.ts                    → role gate (Next 16 middleware convention)
+scripts/                    → seed.mjs · import-core.mjs · import-dresses.mjs · enrich-dresses.mjs
 context/                    → project docs (see below)
-public/                     → images, skintones/, couples/
+public/                     → index.html (landing page) · images · skintones/ · couples/
 ```
 
 > Note: the auth model uses a **single `(app)` route group** with role-aware nav rather than the three groups (`(admin)`/`(cashier)`/`(stylist)`) shown in older docs — Next.js forbids two route groups resolving to the same URL path. See `progress-tracker.md` (Feature 02).
@@ -208,6 +218,8 @@ node --env-file=.env.local scripts/import-core.mjs   # 25 women + 20 men items w
 
 ## Demo Login
 
+Visit `/try` for the guided demo gate (email OTP), or go straight to the store gate at `/login`.
+
 Store code: `VIVAH01`
 
 | Role | Password |
@@ -223,7 +235,7 @@ Store code: `VIVAH01`
 ## Invariants & Conventions
 
 1. `lib/scoring/` is **pure** — same inputs, same outputs; no DB, no fetch, no randomness.
-2. Role checks happen in `middleware.ts` **and** in every server action / route handler (`requireRole()`).
+2. Role checks happen in `proxy.ts` **and** in every server action / route handler (`requireRole()`).
 3. `GROQ_API_KEY` and `OPENAI_API_KEY` are **server-side only**; the client never calls either directly.
 4. All enum strings (categories, occasions, payment modes, statuses) come from `lib/constants.ts` — one source of truth.
 5. Prices are stored as ₹ numerics and rendered with `formatINR()` from `lib/format.ts`.
